@@ -296,7 +296,8 @@ impl PlayerInterface for MprisPlayer {
     }
 
     async fn volume(&self) -> fdo::Result<Volume> {
-        Ok(1.0)
+        let state = self.state.read().await;
+        Ok(f64::from(state.volume) / 100.0)
     }
 
     async fn set_volume(&self, volume: Volume) -> Result<()> {
