@@ -127,6 +127,13 @@ impl App {
             drop(state);
         } else {
             info!("MPV started successfully, ready for playback");
+            match self.mpv.get_volume() {
+                Ok(volume) => {
+                    let mut state = self.state.write().await;
+                    state.volume = volume;
+                }
+                Err(e) => warn!("Failed to read MPV volume: {}", e),
+            }
         }
 
         // Start MPRIS server for media key support
