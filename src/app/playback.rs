@@ -269,6 +269,25 @@ impl App {
         }
     }
 
+    /// Adjust MPV volume by `delta` percentage points, clamping to 0..=100.
+    /// Updates state, notifies the user, and applies to mpv.
+    pub(super) async fn adjust_volume(&mut self, delta: i32) -> Result<(), Error> {
+        let new_volume = {
+            let state = self.state.read().await;
+            (state.volume + delta).clamp(0, 100)
+        };
+
+        if let Err(e) = self.mpv.set_volume(new_volume) {
+            error!("Failed to set volume: {}", e);
+            return Ok(());
+        }
+
+        let mut state = self.state.write().await;
+        state.volume = new_volume;
+        state.notify(format!("Volume: {}%", new_volume));
+        Ok(())
+    }
+
     /// Toggle play/pause
     pub(super) async fn toggle_pause(&mut self) -> Result<(), Error> {
         let state = self.state.read().await;

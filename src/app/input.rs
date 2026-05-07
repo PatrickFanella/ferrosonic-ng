@@ -163,6 +163,17 @@ impl App {
                 state.notify("Data refreshed");
                 return Ok(());
             }
+            // Volume controls (global)
+            (KeyCode::Char('-'), KeyModifiers::NONE) => {
+                drop(state);
+                return self.adjust_volume(-2).await;
+            }
+            (KeyCode::Char('+'), KeyModifiers::NONE)
+            | (KeyCode::Char('+'), KeyModifiers::SHIFT)
+            | (KeyCode::Char('='), KeyModifiers::NONE) => {
+                drop(state);
+                return self.adjust_volume(2).await;
+            }
             _ => {}
         }
 
