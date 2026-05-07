@@ -434,6 +434,8 @@ pub struct AppState {
     pub now_playing: NowPlaying,
     /// Current MPV volume percentage, clamped to 0..=100
     pub volume: i32,
+    /// Whether the hotkeys help modal is visible
+    pub show_hotkeys: bool,
     /// Play queue (songs)
     pub queue: Vec<Child>,
     /// Current position in queue

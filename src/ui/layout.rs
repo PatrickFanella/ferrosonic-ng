@@ -10,7 +10,7 @@ use crate::app::state::{AppState, LayoutAreas, Page};
 use super::footer::Footer;
 use super::header::Header;
 use super::pages;
-use super::widgets::{CavaWidget, NowPlayingWidget};
+use super::widgets::{render_hotkeys_modal, CavaWidget, NowPlayingWidget};
 
 /// Draw the entire UI
 pub fn draw(frame: &mut Frame, state: &mut AppState) {
@@ -111,4 +111,9 @@ pub fn draw(frame: &mut Frame, state: &mut AppState) {
         .sample_rate(state.now_playing.sample_rate)
         .notification(state.notification.as_ref());
     frame.render_widget(footer, footer_area);
+
+    // Render hotkeys modal on top of all content
+    if state.show_hotkeys {
+        render_hotkeys_modal(frame, area, state, colors);
+    }
 }
