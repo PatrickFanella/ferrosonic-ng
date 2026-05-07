@@ -432,6 +432,8 @@ pub struct AppState {
     pub page: Page,
     /// Now playing information
     pub now_playing: NowPlaying,
+    /// Current MPV volume percentage, clamped to 0..=100
+    pub volume: i32,
     /// Play queue (songs)
     pub queue: Vec<Child>,
     /// Current position in queue
@@ -506,6 +508,8 @@ impl AppState {
         state.settings_state.save_queue_enabled = config.save_queue;
         // Default to All songs so navigation and rendering start in sync
         state.browse.selected_option = Some(SongOption::All);
+        // MPV defaults to 100% volume unless read after startup says otherwise
+        state.volume = 100;
 
         state
     }
