@@ -183,7 +183,8 @@ impl SubsonicClient {
         random_songs_count: usize,
     ) -> Result<Vec<Child>, SubsonicError> {
         let mut url = self.build_url("getRandomSongs")?;
-        url.query_pairs_mut().append_pair("size", &random_songs_count.to_string());
+        url.query_pairs_mut()
+            .append_pair("size", &random_songs_count.to_string());
         let data: RandomSongsData = self.request_url(url).await?;
 
         let songs = data.random_songs.song;

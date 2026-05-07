@@ -129,7 +129,6 @@ impl PipeWireController {
         self.current_rate = None;
         Ok(())
     }
-
 }
 
 impl Default for PipeWireController {
@@ -145,4 +144,3 @@ impl Drop for PipeWireController {
         }
     }
 }
-

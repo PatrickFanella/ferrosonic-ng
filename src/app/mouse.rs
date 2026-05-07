@@ -37,8 +37,7 @@ impl App {
                         let mut state = self.state.write().await;
                         state.page = tab_page;
 
-                        let on_starred =
-                            state.browse.selected_option == Some(SongOption::Starred);
+                        let on_starred = state.browse.selected_option == Some(SongOption::Starred);
                         let browse_tab = state.browse.browse_tab.clone();
                         let refresh_songs = on_starred
                             && browse_tab == BrowseTab::Songs

@@ -42,9 +42,13 @@ impl App {
                                 let mut state = self.state.write().await;
                                 let count = songs.len();
                                 state.playlists.songs = songs;
-                                state.playlists.selected_song = if count > 0 { Some(0) } else { None };
+                                state.playlists.selected_song =
+                                    if count > 0 { Some(0) } else { None };
                                 state.playlists.focus = 1;
-                                state.notify(format!("Loaded playlist: {} ({} songs)", playlist_name, count));
+                                state.notify(format!(
+                                    "Loaded playlist: {} ({} songs)",
+                                    playlist_name, count
+                                ));
                             }
                             Err(e) => {
                                 let mut state = self.state.write().await;
@@ -56,7 +60,11 @@ impl App {
                     return Ok(());
                 }
             }
-        } else if x >= right.x && x < right.x + right.width && y >= right.y && y < right.y + right.height {
+        } else if x >= right.x
+            && x < right.x + right.width
+            && y >= right.y
+            && y < right.y + right.height
+        {
             // Songs pane
             let row_in_viewport = y.saturating_sub(right.y + 1) as usize;
             let item_index = state.playlists.song_scroll_offset + row_in_viewport;

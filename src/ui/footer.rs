@@ -45,6 +45,8 @@ impl<'a> Footer<'a> {
             ("p/Space", "Pause"),
             ("h", "Prev"),
             ("l", "Next"),
+            ("-/+", "Volume"),
+            ("?", "Help"),
         ];
 
         match self.page {
@@ -56,7 +58,6 @@ impl<'a> Footer<'a> {
                     ("←/→", "Songs/Albums"),
                     ("/", "Search"),
                     ("Tab", "Focus"),
-                    ("/", "Search"),
                     ("f", "Star/Un-star"),
                 ]);
             }
@@ -110,6 +111,49 @@ impl<'a> Footer<'a> {
         }
 
         binds
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ratatui::style::Color;
+
+    fn colors() -> ThemeColors {
+        ThemeColors {
+            primary: Color::White,
+            secondary: Color::DarkGray,
+            accent: Color::Cyan,
+            artist: Color::White,
+            album: Color::White,
+            song: Color::White,
+            muted: Color::Gray,
+            highlight_bg: Color::Black,
+            highlight_fg: Color::White,
+            success: Color::Green,
+            error: Color::Red,
+            playing: Color::Yellow,
+            played: Color::Gray,
+            border_focused: Color::Cyan,
+            border_unfocused: Color::DarkGray,
+        }
+    }
+
+    #[test]
+    fn footer_includes_global_volume_and_help_hints() {
+        let binds = Footer::new(Page::Queue, colors()).keybinds();
+        assert!(binds.contains(&("-/+", "Volume")));
+        assert!(binds.contains(&("?", "Help")));
+    }
+
+    #[test]
+    fn browse_footer_has_single_search_hint() {
+        let binds = Footer::new(Page::Browse, colors()).keybinds();
+        let search_count = binds
+            .iter()
+            .filter(|(key, desc)| *key == "/" && *desc == "Search")
+            .count();
+        assert_eq!(search_count, 1);
     }
 }
 

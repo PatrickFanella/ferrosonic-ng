@@ -4,6 +4,23 @@ use crate::error::Error;
 
 use super::*;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum HotkeysOverlayAction {
+    Close,
+    Quit,
+    Ignore,
+}
+
+fn hotkeys_overlay_action(key: event::KeyEvent) -> HotkeysOverlayAction {
+    match (key.code, key.modifiers) {
+        (KeyCode::Esc, _)
+        | (KeyCode::Char('?'), KeyModifiers::NONE)
+        | (KeyCode::Char('?'), KeyModifiers::SHIFT) => HotkeysOverlayAction::Close,
+        (KeyCode::Char('q'), KeyModifiers::NONE) => HotkeysOverlayAction::Quit,
+        _ => HotkeysOverlayAction::Ignore,
+    }
+}
+
 impl App {
     /// Handle terminal events
     pub(super) async fn handle_event(&mut self, event: Event) -> Result<(), Error> {
@@ -42,6 +59,21 @@ impl App {
 
         // Clear notification on any keypress
         state.clear_notification();
+
+        // Hotkeys modal is open: only allow close/quit keys
+        if state.show_hotkeys {
+            match hotkeys_overlay_action(key) {
+                HotkeysOverlayAction::Close => {
+                    state.show_hotkeys = false;
+                    return Ok(());
+                }
+                HotkeysOverlayAction::Quit => {
+                    state.should_quit = true;
+                    return Ok(());
+                }
+                HotkeysOverlayAction::Ignore => return Ok(()),
+            }
+        }
 
         // Bypass global keybindings when typing in server text fields or filtering artists/songs
         let is_server_text_field =
@@ -163,6 +195,12 @@ impl App {
                 state.notify("Data refreshed");
                 return Ok(());
             }
+            // Hotkeys help menu (global)
+            (KeyCode::Char('?'), KeyModifiers::NONE)
+            | (KeyCode::Char('?'), KeyModifiers::SHIFT) => {
+                state.show_hotkeys = !state.show_hotkeys;
+                return Ok(());
+            }
             // Volume controls (global)
             (KeyCode::Char('-'), KeyModifiers::NONE) => {
                 drop(state);
@@ -189,5 +227,32 @@ impl App {
             Page::Server => self.handle_server_key(key).await,
             Page::Settings => self.handle_settings_key(key).await,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn overlay_allows_close_keys() {
+        let esc = event::KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
+        let qmark = event::KeyEvent::new(KeyCode::Char('?'), KeyModifiers::NONE);
+        assert_eq!(hotkeys_overlay_action(esc), HotkeysOverlayAction::Close);
+        assert_eq!(hotkeys_overlay_action(qmark), HotkeysOverlayAction::Close);
+    }
+
+    #[test]
+    fn overlay_allows_quit_key() {
+        let quit = event::KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE);
+        assert_eq!(hotkeys_overlay_action(quit), HotkeysOverlayAction::Quit);
+    }
+
+    #[test]
+    fn overlay_ignores_other_keys() {
+        let down = event::KeyEvent::new(KeyCode::Down, KeyModifiers::NONE);
+        let vol = event::KeyEvent::new(KeyCode::Char('-'), KeyModifiers::NONE);
+        assert_eq!(hotkeys_overlay_action(down), HotkeysOverlayAction::Ignore);
+        assert_eq!(hotkeys_overlay_action(vol), HotkeysOverlayAction::Ignore);
     }
 }

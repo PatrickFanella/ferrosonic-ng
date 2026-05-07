@@ -11,7 +11,6 @@ use ratatui::{
 use crate::app::state::AppState;
 use crate::ui::theme::ThemeColors;
 
-
 /// Render the playlists page
 pub fn render(frame: &mut Frame, area: Rect, state: &mut AppState) {
     let colors = *state.settings_state.theme_colors();

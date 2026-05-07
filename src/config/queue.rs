@@ -36,9 +36,8 @@ impl QueuePersist {
         }
 
         let contents = std::fs::read_to_string(path)?;
-        let queue: QueuePersist = serde_json::from_str(&contents).map_err(|e| {
-            std::io::Error::new(std::io::ErrorKind::InvalidData, e)
-        })?;
+        let queue: QueuePersist = serde_json::from_str(&contents)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
 
         debug!("Queue loaded with {} songs", queue.queue.len());
         Ok(queue)
@@ -67,12 +66,15 @@ impl QueuePersist {
             }
         }
 
-        let contents = serde_json::to_string_pretty(self).map_err(|e| {
-            std::io::Error::new(std::io::ErrorKind::InvalidData, e)
-        })?;
+        let contents = serde_json::to_string_pretty(self)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
         std::fs::write(path, contents)?;
 
-        info!("Queue saved with {} songs to {}", self.queue.len(), path.display());
+        info!(
+            "Queue saved with {} songs to {}",
+            self.queue.len(),
+            path.display()
+        );
         Ok(())
     }
 
