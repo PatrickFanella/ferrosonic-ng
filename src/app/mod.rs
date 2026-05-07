@@ -432,7 +432,13 @@ impl App {
                         let _ = self.mpv.seek_relative(offset);
                     }
                     AudioAction::SetVolume(vol) => {
-                        let _ = self.mpv.set_volume(vol);
+                        let new_volume = vol.clamp(0, 100);
+                        if let Err(e) = self.mpv.set_volume(new_volume) {
+                            warn!("MPRIS set_volume failed: {}", e);
+                        } else {
+                            let mut state = self.state.write().await;
+                            state.volume = new_volume;
+                        }
                     }
                 }
             }
