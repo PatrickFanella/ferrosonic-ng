@@ -51,8 +51,16 @@ pub fn render_hotkeys_modal(frame: &mut Frame, area: Rect, state: &AppState, col
 }
 
 fn centered_rect(area: Rect) -> Rect {
-    let width = area.width.clamp(40, 90);
-    let height = area.height.clamp(16, 28);
+    let width = if area.width >= 40 {
+        area.width.clamp(40, 90)
+    } else {
+        area.width
+    };
+    let height = if area.height >= 16 {
+        area.height.clamp(16, 28)
+    } else {
+        area.height
+    };
     let x = area.x + area.width.saturating_sub(width) / 2;
     let y = area.y + area.height.saturating_sub(height) / 2;
     Rect {
