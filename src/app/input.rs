@@ -75,6 +75,15 @@ impl App {
             }
         }
 
+        // `?` toggles the hotkeys overlay regardless of filtering/text-field mode
+        if matches!(
+            (key.code, key.modifiers),
+            (KeyCode::Char('?'), KeyModifiers::NONE) | (KeyCode::Char('?'), KeyModifiers::SHIFT)
+        ) {
+            state.show_hotkeys = !state.show_hotkeys;
+            return Ok(());
+        }
+
         // Bypass global keybindings when typing in server text fields or filtering artists/songs
         let is_server_text_field =
             state.page == Page::Server && state.server_state.selected_field <= 2;
@@ -193,12 +202,6 @@ impl App {
                 self.load_initial_data().await;
                 let mut state = self.state.write().await;
                 state.notify("Data refreshed");
-                return Ok(());
-            }
-            // Hotkeys help menu (global)
-            (KeyCode::Char('?'), KeyModifiers::NONE)
-            | (KeyCode::Char('?'), KeyModifiers::SHIFT) => {
-                state.show_hotkeys = !state.show_hotkeys;
                 return Ok(());
             }
             // Volume controls (global)

@@ -176,4 +176,31 @@ mod tests {
         assert!(inner.x >= outer.x);
         assert!(inner.y >= outer.y);
     }
+
+    #[test]
+    fn centered_rect_stays_within_bounds_small_terminal() {
+        // Terminal smaller than the 40×16 minimum thresholds must not produce
+        // a modal that exceeds the available area.
+        for (w, h) in [(10u16, 8u16), (30, 10), (39, 15)] {
+            let outer = Rect {
+                x: 0,
+                y: 0,
+                width: w,
+                height: h,
+            };
+            let inner = centered_rect(outer);
+            assert!(
+                inner.width <= outer.width,
+                "width {w}: modal width {} > outer width {w}",
+                inner.width
+            );
+            assert!(
+                inner.height <= outer.height,
+                "height {h}: modal height {} > outer height {h}",
+                inner.height
+            );
+            assert!(inner.x >= outer.x);
+            assert!(inner.y >= outer.y);
+        }
+    }
 }
