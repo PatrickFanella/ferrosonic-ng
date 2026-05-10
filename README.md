@@ -23,6 +23,8 @@ Ferrosonic-ng is a continuation of the original [ferrosonic](https://github.com/
 - **13 built-in themes + custom themes** — Monokai, Dracula, Nord, Catppuccin, Tokyo Night, and more. Create your own as TOML files in `~/.config/ferrosonic/themes/`. See the [themes documentation](docs/themes.md)
 - **Mouse support** — Clickable tabs, playback controls, list items, and progress bar seeking
 - **Keyboard-driven** — Vim-style navigation (j/k) alongside arrow keys. See the [full keybindings reference](docs/keybindings.md)
+- **Volume hotkeys** — Adjust playback volume globally with `-` (down) and `+`/`=` (up) in 2% steps
+- **In-app hotkey menu** — Press `?` to open/close a shortcut reference overlay; `Esc` also closes it
 - **Multi-disc album support** — Proper disc and track number display
 
 ## Screenshots
