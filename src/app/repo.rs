@@ -1,8 +1,8 @@
 use super::*;
 
 impl App {
-    /// Page size used by the All-songs view.
-    pub(super) const ALL_SONGS_PAGE_SIZE: usize = 50;
+    /// Page size used by the All-songs view for initial and background fetches.
+    pub(super) const ALL_SONGS_PAGE_SIZE: usize = 250;
 
     /// Page size used by the Albums view (max allowed by getAlbumList2).
     pub(super) const ALL_ALBUMS_PAGE_SIZE: usize = 500;

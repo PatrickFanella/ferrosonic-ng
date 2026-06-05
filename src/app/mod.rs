@@ -268,18 +268,72 @@ impl App {
                 match client.search_songs("", 0, Self::ALL_SONGS_PAGE_SIZE).await {
                     Ok(songs) => {
                         let fetched = songs.len();
-                        let mut state = state.write().await;
-                        if state.browse.songs_load_generation == generation
-                            && state.browse.browse_tab == BrowseTab::Songs
-                            && state.browse.selected_option == Some(SongOption::All)
-                            && state.browse.filter.is_empty()
+                        let mut offset = fetched;
+                        let mut has_more = fetched == Self::ALL_SONGS_PAGE_SIZE;
+
+                        let mut app_state = state.write().await;
+                        if app_state.browse.songs_load_generation == generation
+                            && app_state.browse.browse_tab == BrowseTab::Songs
+                            && app_state.browse.selected_option == Some(SongOption::All)
+                            && app_state.browse.filter.is_empty()
                         {
-                            state.browse.songs = songs;
-                            state.browse.selected_index = if fetched > 0 { Some(0) } else { None };
-                            state.browse.scroll_offset = 0;
-                            state.browse.all_songs_offset = fetched;
-                            state.browse.all_songs_has_more = fetched == Self::ALL_SONGS_PAGE_SIZE;
-                            state.browse.all_songs_loading = false;
+                            app_state.browse.songs = songs;
+                            app_state.browse.selected_index =
+                                if fetched > 0 { Some(0) } else { None };
+                            app_state.browse.scroll_offset = 0;
+                            app_state.browse.all_songs_offset = fetched;
+                            app_state.browse.all_songs_has_more = has_more;
+                            app_state.browse.all_songs_loading = has_more;
+                        } else {
+                            return;
+                        }
+                        drop(app_state);
+
+                        while has_more {
+                            match client
+                                .search_songs("", offset, Self::ALL_SONGS_PAGE_SIZE)
+                                .await
+                            {
+                                Ok(more_songs) => {
+                                    let fetched = more_songs.len();
+                                    has_more = fetched == Self::ALL_SONGS_PAGE_SIZE;
+
+                                    let mut app_state = state.write().await;
+                                    if app_state.browse.songs_load_generation != generation
+                                        || app_state.browse.browse_tab != BrowseTab::Songs
+                                        || app_state.browse.selected_option != Some(SongOption::All)
+                                        || !app_state.browse.filter.is_empty()
+                                    {
+                                        return;
+                                    }
+
+                                    offset += fetched;
+                                    app_state.browse.songs.extend(more_songs);
+                                    app_state.browse.all_songs_offset = offset;
+                                    app_state.browse.all_songs_has_more = has_more;
+                                    app_state.browse.all_songs_loading = has_more;
+
+                                    if fetched == 0 {
+                                        break;
+                                    }
+                                }
+                                Err(e) => {
+                                    error!("Failed to load remaining songs: {}", e);
+                                    let mut app_state = state.write().await;
+                                    if app_state.browse.songs_load_generation == generation
+                                        && app_state.browse.browse_tab == BrowseTab::Songs
+                                        && app_state.browse.selected_option == Some(SongOption::All)
+                                        && app_state.browse.filter.is_empty()
+                                    {
+                                        app_state.browse.all_songs_loading = false;
+                                        app_state.notify_error(format!(
+                                            "Failed to load remaining songs: {}",
+                                            e
+                                        ));
+                                    }
+                                    return;
+                                }
+                            }
                         }
                     }
                     Err(e) => {
