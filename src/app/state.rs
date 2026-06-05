@@ -154,6 +154,8 @@ pub struct BrowseState {
     pub all_songs_has_more: bool,
     /// Whether a page of All songs is currently being fetched
     pub all_songs_loading: bool,
+    /// Monotonic token used to ignore stale async song-load responses.
+    pub songs_load_generation: u64,
 
     // Albums tab
     /// Currently displayed albums (filtered from backing_albums)
@@ -170,6 +172,8 @@ pub struct BrowseState {
     pub albums_has_more: bool,
     /// Whether an album page is currently being fetched
     pub albums_loading: bool,
+    /// Monotonic token used to ignore stale async album-load responses.
+    pub albums_load_generation: u64,
 
     // Shared
     /// Focus pane:

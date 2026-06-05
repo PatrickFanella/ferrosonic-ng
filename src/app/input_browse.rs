@@ -4,6 +4,7 @@ use crate::{
     error::Error,
     subsonic::models::{Album, Child},
 };
+use tracing::error;
 
 use super::*;
 
@@ -31,8 +32,7 @@ impl App {
                     drop(state);
                     self.songs_filter_debounce = None;
 
-                    self.load_song_option(selected_option.unwrap_or(SongOption::All))
-                        .await;
+                    self.spawn_load_song_option(selected_option.unwrap_or(SongOption::All));
                 }
             }
             KeyCode::Right => {
@@ -45,8 +45,7 @@ impl App {
                     drop(state);
                     self.songs_filter_debounce = None;
 
-                    self.load_album_option(selected_option.unwrap_or(SongOption::All))
-                        .await;
+                    self.spawn_load_album_option(selected_option.unwrap_or(SongOption::All));
                 }
             }
 
@@ -76,8 +75,8 @@ impl App {
                     let tab = state.browse.browse_tab.clone();
                     drop(state);
                     match tab {
-                        BrowseTab::Songs => self.load_song_option(opt).await,
-                        BrowseTab::Albums => self.load_album_option(opt).await,
+                        BrowseTab::Songs => self.spawn_load_song_option(opt),
+                        BrowseTab::Albums => self.spawn_load_album_option(opt),
                     }
                 }
             }
@@ -97,8 +96,8 @@ impl App {
                     let tab = state.browse.browse_tab.clone();
                     drop(state);
                     match tab {
-                        BrowseTab::Songs => self.load_song_option(opt).await,
-                        BrowseTab::Albums => self.load_album_option(opt).await,
+                        BrowseTab::Songs => self.spawn_load_song_option(opt),
+                        BrowseTab::Albums => self.spawn_load_album_option(opt),
                     }
                 }
             }
@@ -540,12 +539,7 @@ impl App {
             }
             BrowseTab::Songs => match option {
                 Some(SongOption::All) => {
-                    {
-                        let mut state = self.state.write().await;
-                        state.browse.all_songs_offset = 0;
-                        state.browse.all_songs_has_more = true;
-                    }
-                    self.get_all_songs(false).await;
+                    self.spawn_load_song_option(SongOption::All);
                 }
                 _ => {
                     self.state.write().await.browse.apply_filter();
@@ -554,34 +548,325 @@ impl App {
         }
     }
 
-    async fn load_song_option(&mut self, opt: SongOption) {
-        match opt {
-            SongOption::All => {
-                {
-                    let mut state = self.state.write().await;
-                    state.browse.all_songs_offset = 0;
-                    state.browse.all_songs_has_more = true;
+    pub(super) fn spawn_load_song_option(&mut self, opt: SongOption) {
+        let Some(client) = self.subsonic.clone() else {
+            return;
+        };
+        let state = self.state.clone();
+
+        tokio::spawn(async move {
+            match opt {
+                SongOption::All => {
+                    let (filter, generation) = {
+                        let mut state = state.write().await;
+                        if state.page != Page::Browse
+                            || state.browse.browse_tab != BrowseTab::Songs
+                            || state.browse.selected_option != Some(SongOption::All)
+                        {
+                            return;
+                        }
+                        state.browse.songs_load_generation =
+                            state.browse.songs_load_generation.wrapping_add(1);
+                        let generation = state.browse.songs_load_generation;
+                        state.browse.all_songs_offset = 0;
+                        state.browse.all_songs_has_more = true;
+                        state.browse.all_songs_loading = true;
+                        state.browse.songs.clear();
+                        state.browse.selected_index = None;
+                        state.notify("Loading all songs…");
+                        (state.browse.filter.clone(), generation)
+                    };
+
+                    match client
+                        .search_songs(&filter, 0, Self::ALL_SONGS_PAGE_SIZE)
+                        .await
+                    {
+                        Ok(songs) => {
+                            let fetched = songs.len();
+                            let mut state = state.write().await;
+                            if state.page == Page::Browse
+                                && state.browse.browse_tab == BrowseTab::Songs
+                                && state.browse.selected_option == Some(SongOption::All)
+                                && state.browse.filter == filter
+                                && state.browse.songs_load_generation == generation
+                            {
+                                state.browse.all_songs_loading = false;
+                                state.browse.songs = songs;
+                                state.browse.selected_index =
+                                    if fetched > 0 { Some(0) } else { None };
+                                state.browse.scroll_offset = 0;
+                                state.browse.all_songs_offset = fetched;
+                                state.browse.all_songs_has_more =
+                                    fetched == Self::ALL_SONGS_PAGE_SIZE;
+                            }
+                        }
+                        Err(e) => {
+                            error!("Failed to load all songs: {}", e);
+                            let mut state = state.write().await;
+                            if state.page == Page::Browse
+                                && state.browse.browse_tab == BrowseTab::Songs
+                                && state.browse.selected_option == Some(SongOption::All)
+                                && state.browse.filter == filter
+                                && state.browse.songs_load_generation == generation
+                            {
+                                state.browse.all_songs_loading = false;
+                                state.notify_error(format!("Failed to load all songs: {}", e));
+                            }
+                        }
+                    }
                 }
-                self.get_all_songs(false).await;
+                SongOption::Starred => {
+                    let generation = {
+                        let mut state = state.write().await;
+                        if state.page != Page::Browse
+                            || state.browse.browse_tab != BrowseTab::Songs
+                            || state.browse.selected_option != Some(SongOption::Starred)
+                        {
+                            return;
+                        }
+                        state.browse.songs_load_generation =
+                            state.browse.songs_load_generation.wrapping_add(1);
+                        let generation = state.browse.songs_load_generation;
+                        state.browse.all_songs_loading = false;
+                        state.browse.songs.clear();
+                        state.browse.backing_songs.clear();
+                        state.browse.selected_index = None;
+                        state.notify("Loading starred songs…");
+                        generation
+                    };
+
+                    match client.get_starred_songs().await {
+                        Ok(songs) => {
+                            let mut state = state.write().await;
+                            if state.page == Page::Browse
+                                && state.browse.browse_tab == BrowseTab::Songs
+                                && state.browse.selected_option == Some(SongOption::Starred)
+                                && state.browse.songs_load_generation == generation
+                            {
+                                state.browse.backing_songs = songs;
+                                state.browse.apply_filter();
+                            }
+                        }
+                        Err(e) => {
+                            error!("Failed to load starred songs: {}", e);
+                            let mut state = state.write().await;
+                            if state.page == Page::Browse
+                                && state.browse.browse_tab == BrowseTab::Songs
+                                && state.browse.selected_option == Some(SongOption::Starred)
+                                && state.browse.songs_load_generation == generation
+                            {
+                                state.notify_error(format!("Failed to load starred songs: {}", e));
+                            }
+                        }
+                    }
+                }
+                SongOption::Random => {
+                    let (random_songs_count, generation) = {
+                        let mut state = state.write().await;
+                        if state.page != Page::Browse
+                            || state.browse.browse_tab != BrowseTab::Songs
+                            || state.browse.selected_option != Some(SongOption::Random)
+                        {
+                            return;
+                        }
+                        state.browse.songs_load_generation =
+                            state.browse.songs_load_generation.wrapping_add(1);
+                        let generation = state.browse.songs_load_generation;
+                        state.browse.all_songs_loading = false;
+                        state.browse.songs.clear();
+                        state.browse.backing_songs.clear();
+                        state.browse.selected_index = None;
+                        state.notify("Loading random songs…");
+                        (state.config.random_songs_count, generation)
+                    };
+
+                    match client.get_random_songs(random_songs_count).await {
+                        Ok(songs) => {
+                            let mut state = state.write().await;
+                            if state.page == Page::Browse
+                                && state.browse.browse_tab == BrowseTab::Songs
+                                && state.browse.selected_option == Some(SongOption::Random)
+                                && state.browse.songs_load_generation == generation
+                            {
+                                state.browse.backing_songs = songs;
+                                state.browse.apply_filter();
+                            }
+                        }
+                        Err(e) => {
+                            error!("Failed to load random songs: {}", e);
+                            let mut state = state.write().await;
+                            if state.page == Page::Browse
+                                && state.browse.browse_tab == BrowseTab::Songs
+                                && state.browse.selected_option == Some(SongOption::Random)
+                                && state.browse.songs_load_generation == generation
+                            {
+                                state.notify_error(format!("Failed to load random songs: {}", e));
+                            }
+                        }
+                    }
+                }
             }
-            SongOption::Starred => self.get_starred_songs().await,
-            SongOption::Random => self.get_random_songs().await,
-        }
+        });
     }
 
-    async fn load_album_option(&mut self, opt: SongOption) {
-        match opt {
-            SongOption::All => {
-                {
-                    let mut state = self.state.write().await;
-                    state.browse.albums_offset = 0;
-                    state.browse.albums_has_more = true;
+    pub(super) fn spawn_load_album_option(&mut self, opt: SongOption) {
+        let Some(client) = self.subsonic.clone() else {
+            return;
+        };
+        let state = self.state.clone();
+
+        tokio::spawn(async move {
+            match opt {
+                SongOption::All => {
+                    let (filter, generation) = {
+                        let mut state = state.write().await;
+                        if state.page != Page::Browse
+                            || state.browse.browse_tab != BrowseTab::Albums
+                            || state.browse.selected_option != Some(SongOption::All)
+                        {
+                            return;
+                        }
+                        state.browse.albums_load_generation =
+                            state.browse.albums_load_generation.wrapping_add(1);
+                        let generation = state.browse.albums_load_generation;
+                        state.browse.albums_offset = 0;
+                        state.browse.albums_has_more = true;
+                        state.browse.albums_loading = true;
+                        state.browse.albums.clear();
+                        state.browse.backing_albums.clear();
+                        state.browse.selected_album = None;
+                        state.notify("Loading albums…");
+                        (state.browse.filter.clone(), generation)
+                    };
+
+                    match client
+                        .get_album_list("alphabeticalByName", Self::ALL_ALBUMS_PAGE_SIZE, 0)
+                        .await
+                    {
+                        Ok(albums) => {
+                            let fetched = albums.len();
+                            let mut state = state.write().await;
+                            if state.page == Page::Browse
+                                && state.browse.browse_tab == BrowseTab::Albums
+                                && state.browse.selected_option == Some(SongOption::All)
+                                && state.browse.filter == filter
+                                && state.browse.albums_load_generation == generation
+                            {
+                                state.browse.albums_loading = false;
+                                state.browse.backing_albums = albums;
+                                state.browse.apply_album_filter();
+                                state.browse.albums_offset = fetched;
+                                state.browse.albums_has_more =
+                                    fetched == Self::ALL_ALBUMS_PAGE_SIZE;
+                            }
+                        }
+                        Err(e) => {
+                            error!("Failed to load albums: {}", e);
+                            let mut state = state.write().await;
+                            if state.page == Page::Browse
+                                && state.browse.browse_tab == BrowseTab::Albums
+                                && state.browse.selected_option == Some(SongOption::All)
+                                && state.browse.filter == filter
+                                && state.browse.albums_load_generation == generation
+                            {
+                                state.browse.albums_loading = false;
+                                state.notify_error(format!("Failed to load albums: {}", e));
+                            }
+                        }
+                    }
                 }
-                self.get_browse_albums(false).await;
+                SongOption::Starred => {
+                    let generation = {
+                        let mut state = state.write().await;
+                        if state.page != Page::Browse
+                            || state.browse.browse_tab != BrowseTab::Albums
+                            || state.browse.selected_option != Some(SongOption::Starred)
+                        {
+                            return;
+                        }
+                        state.browse.albums_load_generation =
+                            state.browse.albums_load_generation.wrapping_add(1);
+                        let generation = state.browse.albums_load_generation;
+                        state.browse.albums_loading = false;
+                        state.browse.albums.clear();
+                        state.browse.backing_albums.clear();
+                        state.browse.selected_album = None;
+                        state.notify("Loading starred albums…");
+                        generation
+                    };
+
+                    match client.get_starred_albums().await {
+                        Ok(albums) => {
+                            let mut state = state.write().await;
+                            if state.page == Page::Browse
+                                && state.browse.browse_tab == BrowseTab::Albums
+                                && state.browse.selected_option == Some(SongOption::Starred)
+                                && state.browse.albums_load_generation == generation
+                            {
+                                state.browse.backing_albums = albums;
+                                state.browse.apply_album_filter();
+                            }
+                        }
+                        Err(e) => {
+                            error!("Failed to load starred albums: {}", e);
+                            let mut state = state.write().await;
+                            if state.page == Page::Browse
+                                && state.browse.browse_tab == BrowseTab::Albums
+                                && state.browse.selected_option == Some(SongOption::Starred)
+                                && state.browse.albums_load_generation == generation
+                            {
+                                state.notify_error(format!("Failed to load starred albums: {}", e));
+                            }
+                        }
+                    }
+                }
+                SongOption::Random => {
+                    let (random_songs_count, generation) = {
+                        let mut state = state.write().await;
+                        if state.page != Page::Browse
+                            || state.browse.browse_tab != BrowseTab::Albums
+                            || state.browse.selected_option != Some(SongOption::Random)
+                        {
+                            return;
+                        }
+                        state.browse.albums_load_generation =
+                            state.browse.albums_load_generation.wrapping_add(1);
+                        let generation = state.browse.albums_load_generation;
+                        state.browse.albums_loading = false;
+                        state.browse.albums.clear();
+                        state.browse.backing_albums.clear();
+                        state.browse.selected_album = None;
+                        state.notify("Loading random albums…");
+                        (state.config.random_songs_count, generation)
+                    };
+
+                    match client.get_random_albums(random_songs_count).await {
+                        Ok(albums) => {
+                            let mut state = state.write().await;
+                            if state.page == Page::Browse
+                                && state.browse.browse_tab == BrowseTab::Albums
+                                && state.browse.selected_option == Some(SongOption::Random)
+                                && state.browse.albums_load_generation == generation
+                            {
+                                state.browse.backing_albums = albums;
+                                state.browse.apply_album_filter();
+                            }
+                        }
+                        Err(e) => {
+                            error!("Failed to load random albums: {}", e);
+                            let mut state = state.write().await;
+                            if state.page == Page::Browse
+                                && state.browse.browse_tab == BrowseTab::Albums
+                                && state.browse.selected_option == Some(SongOption::Random)
+                                && state.browse.albums_load_generation == generation
+                            {
+                                state.notify_error(format!("Failed to load random albums: {}", e));
+                            }
+                        }
+                    }
+                }
             }
-            SongOption::Starred => self.get_starred_albums().await,
-            SongOption::Random => self.get_random_albums().await,
-        }
+        });
     }
 
     /// Remove current preloaded track

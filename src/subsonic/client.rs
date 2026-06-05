@@ -1,6 +1,7 @@
 //! Subsonic API client
 
 use reqwest::Client;
+use std::time::Duration;
 use tracing::{debug, info};
 use url::Url;
 
@@ -12,6 +13,8 @@ use crate::error::SubsonicError;
 const CLIENT_NAME: &str = "ferrosonic-rs";
 /// API version we support
 const API_VERSION: &str = "1.16.1";
+const HTTP_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+const HTTP_REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
 
 /// Subsonic API client
 #[derive(Clone)]
@@ -33,6 +36,8 @@ impl SubsonicClient {
 
         let http = Client::builder()
             .user_agent(CLIENT_NAME)
+            .connect_timeout(HTTP_CONNECT_TIMEOUT)
+            .timeout(HTTP_REQUEST_TIMEOUT)
             .build()
             .map_err(SubsonicError::Http)?;
 
@@ -183,7 +188,8 @@ impl SubsonicClient {
         random_songs_count: usize,
     ) -> Result<Vec<Child>, SubsonicError> {
         let mut url = self.build_url("getRandomSongs")?;
-        url.query_pairs_mut().append_pair("size", &random_songs_count.to_string());
+        url.query_pairs_mut()
+            .append_pair("size", &random_songs_count.to_string());
         let data: RandomSongsData = self.request_url(url).await?;
 
         let songs = data.random_songs.song;

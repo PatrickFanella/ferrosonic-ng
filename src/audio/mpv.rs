@@ -5,7 +5,7 @@ use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -13,6 +13,8 @@ use tracing::{debug, info, trace};
 
 use crate::config::paths::mpv_socket_path;
 use crate::error::AudioError;
+
+const MPV_COMMAND_TIMEOUT: Duration = Duration::from_millis(300);
 
 /// Parsed live metadata for an internet radio stream.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -167,11 +169,20 @@ impl MpvController {
             .flush()
             .map_err(|e| AudioError::MpvIpc(e.to_string()))?;
 
-        // Read response
+        // Read response. MPV IPC can otherwise stall the single UI loop forever
+        // when the socket stays open but mpv stops answering.
+        let started_at = Instant::now();
         let mut reader = BufReader::new(socket.try_clone().map_err(AudioError::MpvSocket)?);
         let mut line = String::new();
 
         loop {
+            if started_at.elapsed() >= MPV_COMMAND_TIMEOUT {
+                return Err(AudioError::MpvIpc(format!(
+                    "Response timed out after {} ms",
+                    MPV_COMMAND_TIMEOUT.as_millis()
+                )));
+            }
+
             line.clear();
             match reader.read_line(&mut line) {
                 Ok(0) => return Err(AudioError::MpvIpc("Socket closed".to_string())),
@@ -445,6 +456,8 @@ fn split_icy_title(value: &str) -> Option<(String, String)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::os::unix::net::UnixStream;
+    use std::sync::atomic::AtomicU64;
 
     #[test]
     fn parses_artist_and_title_metadata() {
@@ -483,6 +496,51 @@ mod tests {
                 artist: None,
             }
         );
+    }
+
+    #[test]
+    fn ipc_command_times_out_when_mpv_stops_answering() {
+        let (client, server) = UnixStream::pair().expect("socket pair");
+        client
+            .set_read_timeout(Some(Duration::from_millis(100)))
+            .expect("read timeout");
+
+        let server_thread = std::thread::spawn(move || {
+            let mut reader = BufReader::new(server.try_clone().expect("clone server socket"));
+            let mut request = String::new();
+            let _ = reader.read_line(&mut request);
+            std::thread::sleep(MPV_COMMAND_TIMEOUT + Duration::from_millis(200));
+            let mut server = server;
+            let _ = writeln!(
+                server,
+                r#"{{"request_id":1,"error":"success","data":null}}"#
+            );
+        });
+
+        let mut controller = MpvController {
+            socket_path: PathBuf::from("/tmp/ferrosonic-test-mpv.sock"),
+            process: None,
+            request_id: AtomicU64::new(1),
+            socket: Some(client),
+        };
+
+        let started_at = Instant::now();
+        let err = controller
+            .send_command(vec![json!("get_property"), json!("pause")])
+            .expect_err("slow mpv response should time out");
+        let elapsed = started_at.elapsed();
+
+        assert!(
+            matches!(err, AudioError::MpvIpc(ref message) if message.contains("timed out")),
+            "unexpected error: {err:?}"
+        );
+        assert!(
+            elapsed < MPV_COMMAND_TIMEOUT + Duration::from_millis(150),
+            "timeout took too long: {elapsed:?}"
+        );
+        assert!(controller.socket.is_none());
+
+        server_thread.join().expect("server thread");
     }
 }
 

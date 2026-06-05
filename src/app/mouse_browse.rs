@@ -45,28 +45,8 @@ impl App {
 
                 let opt = selected_option.unwrap_or(SongOption::All);
                 match new_tab {
-                    BrowseTab::Songs => match opt {
-                        SongOption::All => {
-                            let mut state = self.state.write().await;
-                            state.browse.all_songs_offset = 0;
-                            state.browse.all_songs_has_more = true;
-                            drop(state);
-                            self.get_all_songs(false).await;
-                        }
-                        SongOption::Starred => self.get_starred_songs().await,
-                        SongOption::Random => self.get_random_songs().await,
-                    },
-                    BrowseTab::Albums => match opt {
-                        SongOption::All => {
-                            let mut state = self.state.write().await;
-                            state.browse.albums_offset = 0;
-                            state.browse.albums_has_more = true;
-                            drop(state);
-                            self.get_browse_albums(false).await;
-                        }
-                        SongOption::Starred => self.get_starred_albums().await,
-                        SongOption::Random => self.get_random_albums().await,
-                    },
+                    BrowseTab::Songs => self.spawn_load_song_option(opt),
+                    BrowseTab::Albums => self.spawn_load_album_option(opt),
                 }
             }
         } else if y >= options_area.y && y < options_area.y + options_area.height {
@@ -82,28 +62,8 @@ impl App {
                     let tab = state.browse.browse_tab.clone();
                     drop(state);
                     match tab {
-                        BrowseTab::Songs => match opt {
-                            SongOption::All => {
-                                let mut state = self.state.write().await;
-                                state.browse.all_songs_offset = 0;
-                                state.browse.all_songs_has_more = true;
-                                drop(state);
-                                self.get_all_songs(false).await;
-                            }
-                            SongOption::Starred => self.get_starred_songs().await,
-                            SongOption::Random => self.get_random_songs().await,
-                        },
-                        BrowseTab::Albums => match opt {
-                            SongOption::All => {
-                                let mut state = self.state.write().await;
-                                state.browse.albums_offset = 0;
-                                state.browse.albums_has_more = true;
-                                drop(state);
-                                self.get_browse_albums(false).await;
-                            }
-                            SongOption::Starred => self.get_starred_albums().await,
-                            SongOption::Random => self.get_random_albums().await,
-                        },
+                        BrowseTab::Songs => self.spawn_load_song_option(opt),
+                        BrowseTab::Albums => self.spawn_load_album_option(opt),
                     }
                 }
             }

@@ -2,10 +2,10 @@ use super::*;
 
 impl App {
     /// Page size used by the All-songs view.
-    const ALL_SONGS_PAGE_SIZE: usize = 50;
+    pub(super) const ALL_SONGS_PAGE_SIZE: usize = 50;
 
     /// Page size used by the Albums view (max allowed by getAlbumList2).
-    const ALL_ALBUMS_PAGE_SIZE: usize = 500;
+    pub(super) const ALL_ALBUMS_PAGE_SIZE: usize = 500;
 
     /// Fetch the next page of songs for the "All" view via `search3`.
     ///
@@ -72,6 +72,7 @@ impl App {
         }
     }
 
+    #[allow(dead_code)]
     pub async fn get_random_songs(&mut self) {
         if let Some(ref client) = self.subsonic {
             let random_songs_count = self.state.read().await.config.random_songs_count;
@@ -160,6 +161,7 @@ impl App {
         }
     }
 
+    #[allow(dead_code)]
     pub async fn get_random_albums(&mut self) {
         if let Some(ref client) = self.subsonic {
             let random_songs_count = self.state.read().await.config.random_songs_count;
@@ -178,6 +180,7 @@ impl App {
         }
     }
 
+    #[allow(dead_code)]
     pub async fn get_artists(&mut self) {
         if let Some(ref client) = self.subsonic {
             match client.get_artists().await {
@@ -199,6 +202,7 @@ impl App {
         }
     }
 
+    #[allow(dead_code)]
     pub async fn get_playlists(&mut self) {
         if let Some(ref client) = self.subsonic {
             match client.get_playlists().await {
@@ -216,6 +220,7 @@ impl App {
         }
     }
 
+    #[allow(dead_code)]
     pub async fn get_radio_stations(&mut self) {
         if let Some(ref client) = self.subsonic {
             match client.get_internet_radio_stations().await {

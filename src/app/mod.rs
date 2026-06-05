@@ -246,10 +246,111 @@ impl App {
             state.browse.all_songs_has_more = true;
         }
 
-        self.get_all_songs(false).await;
-        self.get_artists().await;
-        self.get_playlists().await;
-        self.get_radio_stations().await;
+        let Some(client) = self.subsonic.clone() else {
+            return;
+        };
+        let state = self.state.clone();
+
+        {
+            let client = client.clone();
+            let state = state.clone();
+            tokio::spawn(async move {
+                let generation = {
+                    let mut state = state.write().await;
+                    state.browse.songs_load_generation =
+                        state.browse.songs_load_generation.wrapping_add(1);
+                    let generation = state.browse.songs_load_generation;
+                    state.browse.all_songs_loading = true;
+                    state.notify("Loading library…");
+                    generation
+                };
+
+                match client.search_songs("", 0, Self::ALL_SONGS_PAGE_SIZE).await {
+                    Ok(songs) => {
+                        let fetched = songs.len();
+                        let mut state = state.write().await;
+                        if state.browse.songs_load_generation == generation
+                            && state.browse.browse_tab == BrowseTab::Songs
+                            && state.browse.selected_option == Some(SongOption::All)
+                            && state.browse.filter.is_empty()
+                        {
+                            state.browse.songs = songs;
+                            state.browse.selected_index = if fetched > 0 { Some(0) } else { None };
+                            state.browse.scroll_offset = 0;
+                            state.browse.all_songs_offset = fetched;
+                            state.browse.all_songs_has_more = fetched == Self::ALL_SONGS_PAGE_SIZE;
+                            state.browse.all_songs_loading = false;
+                        }
+                    }
+                    Err(e) => {
+                        error!("Failed to load all songs: {}", e);
+                        let mut state = state.write().await;
+                        if state.browse.songs_load_generation == generation {
+                            state.browse.all_songs_loading = false;
+                            state.notify_error(format!("Failed to load all songs: {}", e));
+                        }
+                    }
+                }
+            });
+        }
+
+        {
+            let client = client.clone();
+            let state = state.clone();
+            tokio::spawn(async move {
+                match client.get_artists().await {
+                    Ok(artists) => {
+                        let count = artists.len();
+                        let mut state = state.write().await;
+                        state.artists.artists = artists;
+                        state.artists.selected_index = if count > 0 { Some(0) } else { None };
+                        info!("Loaded {} artists", count);
+                    }
+                    Err(e) => {
+                        error!("Failed to load artists: {}", e);
+                        state
+                            .write()
+                            .await
+                            .notify_error(format!("Failed to load artists: {}", e));
+                    }
+                }
+            });
+        }
+
+        {
+            let client = client.clone();
+            let state = state.clone();
+            tokio::spawn(async move {
+                match client.get_playlists().await {
+                    Ok(playlists) => {
+                        let count = playlists.len();
+                        state.write().await.playlists.playlists = playlists;
+                        info!("Loaded {} playlists", count);
+                    }
+                    Err(e) => error!("Failed to load playlists: {}", e),
+                }
+            });
+        }
+
+        tokio::spawn(async move {
+            match client.get_internet_radio_stations().await {
+                Ok(stations) => {
+                    let count = stations.len();
+                    let mut state = state.write().await;
+                    state.radio.stations = stations;
+                    state.radio.selected = if count > 0 { Some(0) } else { None };
+                    state.radio.scroll_offset = 0;
+                    info!("Loaded {} radio stations", count);
+                }
+                Err(e) => {
+                    error!("Failed to load radio stations: {}", e);
+                    state
+                        .write()
+                        .await
+                        .notify_error(format!("Failed to load radio stations: {}", e));
+                }
+            }
+        });
     }
 
     /// Restore queue from persistence file
@@ -389,12 +490,7 @@ impl App {
                         && state.browse.browse_tab == BrowseTab::Songs;
                     drop(state);
                     if is_all {
-                        {
-                            let mut state = self.state.write().await;
-                            state.browse.all_songs_offset = 0;
-                            state.browse.all_songs_has_more = true;
-                        }
-                        self.get_all_songs(false).await;
+                        self.spawn_load_song_option(SongOption::All);
                     }
                 }
             }
