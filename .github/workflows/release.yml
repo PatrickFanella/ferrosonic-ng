@@ -5,9 +5,13 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: read
+
 jobs:
   build:
     name: Build Linux binary
+    timeout-minutes: 30
     runs-on: ubuntu-22.04
     permissions:
       contents: write
@@ -55,6 +59,7 @@ jobs:
   publish:
     name: Publish to crates.io
     needs: build
+    timeout-minutes: 30
     runs-on: ubuntu-22.04
     environment: release
     permissions:
